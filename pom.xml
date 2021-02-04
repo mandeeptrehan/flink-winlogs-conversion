@@ -175,7 +175,7 @@
 							<transformers>
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>com.cloudera.flink.example.FlinkKafkaSimpleStream</mainClass>
+									<mainClass>com.cloudera.flink.winlogs.main.FlinkWinXml2JsonStream</mainClass>
 								</transformer>
 							</transformers>
 						</configuration>
