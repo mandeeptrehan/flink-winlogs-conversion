@@ -1,4 +1,4 @@
-package com.cloudera.flink.filter;
+package com.cloudera.flink.winlogs.filter;
 
 import org.apache.flink.api.common.functions.RichFilterFunction;
 import org.apache.flink.api.common.state.StateTtlConfig;
