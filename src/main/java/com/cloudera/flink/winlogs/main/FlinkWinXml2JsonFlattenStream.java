@@ -14,7 +14,6 @@ import org.apache.flink.streaming.connectors.kafka.KafkaSerializationSchema;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.json.XML;
 
-import com.cloudera.flink.winlogs.filter.DedupeFilterValueState;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -40,10 +39,10 @@ public class FlinkWinXml2JsonFlattenStream {
 		String groupId = args[3];
 
 		// For local execution enable this property
-		// System.setProperty("java.security.auth.login.config","./src/main/resources/jaas.conf");
+		//System.setProperty("java.security.auth.login.config","./jaas.conf");
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.enableCheckpointing(2000);
+		env.enableCheckpointing(30000);
 
 		Properties producerProperties = new Properties();
 		producerProperties.setProperty("bootstrap.servers", brokers);
@@ -55,7 +54,7 @@ public class FlinkWinXml2JsonFlattenStream {
 		// Disable these properties while running on local
 		producerProperties.setProperty("ssl.truststore.location", "/usr/lib/jvm/java-1.8.0/jre/lib/security/cacerts");
 		producerProperties.put("sasl.jaas.config",
-				"org.apache.kafka.common.security.plain.PlainLoginModule required username=\"name\" password=\"pass#\";");
+				"org.apache.kafka.common.security.plain.PlainLoginModule required username=\"name\" password=\"password\";");
 
 		// For local execution enable this property
 		// producerProperties.setProperty("ssl.truststore.location", "./src/main/resources/truststore.jks");
@@ -83,7 +82,7 @@ public class FlinkWinXml2JsonFlattenStream {
 		// Disable these properties while running on local
 		consumerProperties.setProperty("ssl.truststore.location", "/usr/lib/jvm/java-1.8.0/jre/lib/security/cacerts");
 		consumerProperties.put("sasl.jaas.config",
-				"org.apache.kafka.common.security.plain.PlainLoginModule required username=\"name\" password=\"pass#\";");
+				"org.apache.kafka.common.security.plain.PlainLoginModule required username=\"name\" password=\"Password\";");
 
 		FlinkKafkaConsumer<String> myConsumer = new FlinkKafkaConsumer<>(inputTopic, new SimpleStringSchema(),
 				consumerProperties);
@@ -101,14 +100,22 @@ public class FlinkWinXml2JsonFlattenStream {
 			
 						@Override
 						public boolean filter(String log) throws Exception {
-							if (!log.trim().equals("") && log.contains("<Event"))
-								return true;
-							else
-								return false;
+							try {
+								String tempLog = log.replaceAll("[^\\p{ASCII}]", "");
+								XML.toJSONObject(tempLog).toString();
+								if (!log.trim().equals("") && log.contains("<Event")) {
+									return true;
+								}
+							} catch (Exception e) {
+								System.out.println("Json Event:" + log.toString());
+								e.printStackTrace();
+	
+							}
+							return false;
 						}
-					}).name("FilterEmpty&JunkEvents")
+					}).name("Filter")
 				.map(xmlEvent -> {	
-						xmlEvent = xmlEvent.substring(xmlEvent.indexOf("<"));
+						xmlEvent = xmlEvent.replaceAll("[^\\p{ASCII}]", "");
 						String jsonString = XML.toJSONObject(xmlEvent).toString();
 						if (jsonString == null || jsonString.equals("") || jsonString.equals("{}")) {
 							System.out.println(xmlEvent);
@@ -116,11 +123,11 @@ public class FlinkWinXml2JsonFlattenStream {
 						return jsonString;
 					}).name("Xml2Json")
 				.map(jsonString -> gson.fromJson(jsonString, JsonObject.class)).name("Json2Object")
-						.keyBy(jsonObject -> jsonObject.getAsJsonObject("Event").getAsJsonObject("System").get("Computer")
-								.getAsString()
-								+ jsonObject.getAsJsonObject("Event").getAsJsonObject("System").get("EventRecordID")
-										.getAsString())
-				.filter(new DedupeFilterValueState<>()).name("Dedup")
+						//.keyBy(jsonObject -> jsonObject.getAsJsonObject("Event").getAsJsonObject("System").get("Computer")
+						//		.getAsString()
+						//		+ jsonObject.getAsJsonObject("Event").getAsJsonObject("System").get("EventRecordID")
+						//				.getAsString())
+				//.filter(new DedupeFilterValueState<>()).name("Dedup")
 				.map(new MapFunction<JsonObject, String>() {
 		
 							/**
@@ -171,7 +178,7 @@ public class FlinkWinXml2JsonFlattenStream {
 							}
 						}).name("Json2FlattenedJson");
 
-		messageStream.addSink(producer).name("KafkaFlattenJsonTopic");
+		messageStream.addSink(producer);
 
 		env.execute();
 
